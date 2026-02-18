@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sigma Insurance Calculator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 30px;
+    }
+    .box {
+      background: #fff;
+      padding: 20px;
+      max-width: 500px;
+      margin: auto;
+      border-radius: 8px;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    table {
+      width: 100%;
+      margin-top: 20px;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #eee;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="box">
+    <h2>Insurance Calculator</h2>
+
+    <input type="number" id="year" placeholder="Car Year (e.g. 2020)" />
+    <input type="number" id="price" placeholder="Car Price ($)" />
+
+    <button onclick="calculate()">Calculate</button>
+
+    <table id="result" style="display:none;">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Basic ($)</th>
+          <th>Advanced ($)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    async function calculate() {
+      const year = document.getElementById('year').value;
+      const price = document.getElementById('price').value;
+
+      const res = await fetch('/calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, price })
+      });
+
+      const data = await res.json();
+      const tbody = document.querySelector('#result tbody');
+      tbody.innerHTML = '';
+
+      data.forEach(row => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${row.company}</td>
+            <td>${row.basic}</td>
+            <td>${row.advanced}</td>
+          </tr>
+        `;
+      });
+
+      document.getElementById('result').style.display = 'table';
+    }
+  </script>
+
+</body>
+</html>
