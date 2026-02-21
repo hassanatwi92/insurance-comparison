@@ -1,139 +1,176 @@
-window.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", () => {
 
   const companiesDiv = document.getElementById('companies');
   const addCompanyBtn = document.getElementById('addCompanyBtn');
-  let companiesData = [];
 
-  // Fetch companies
+  // --- Fetch companies from server ---
   async function loadCompanies() {
-    const res = await fetch('/api/companies');
-    companiesData = await res.json();
-    renderCompanies();
+    try {
+      const res = await fetch('/api/companies');
+      const companiesData = await res.json();
+      renderCompanies(companiesData);
+    } catch (err) {
+      console.error("Error loading companies:", err);
+    }
   }
 
-  function renderCompanies() {
+  // --- Render companies ---
+  function renderCompanies(companiesData) {
     companiesDiv.innerHTML = '';
     companiesData.forEach((company, ci) => {
       const compDiv = document.createElement('div');
       compDiv.className = 'company';
       compDiv.innerHTML = `
         <strong>${company.name}</strong>
-        <button onclick="deleteCompany(${company.id})">Delete Company</button><br>
+        <button onclick="deleteCompany('${company._id}')">Delete Company</button><br>
 
         <div class="plan">
-          <strong>Basic</strong> <button onclick="addYearRange(${ci}, 'basic')">+ Year Range</button>
-          <div id="basic-${ci}"></div>
+          <strong>Basic</strong> <button onclick="addYearRange('${company._id}', 'basic')">+ Year Range</button>
+          <div id="basic-${company._id}"></div>
         </div>
 
         <div class="plan">
-          <strong>Advanced</strong> <button onclick="addYearRange(${ci}, 'advanced')">+ Year Range</button>
-          <div id="advanced-${ci}"></div>
+          <strong>Advanced</strong> <button onclick="addYearRange('${company._id}', 'advanced')">+ Year Range</button>
+          <div id="advanced-${company._id}"></div>
         </div>
 
-        <button onclick="saveCompany(${ci})">Save Company</button>
+        <button onclick="saveCompany('${company._id}')">Save Company</button>
       `;
       companiesDiv.appendChild(compDiv);
 
-      renderPlan(company, ci, 'basic');
-      renderPlan(company, ci, 'advanced');
+      renderPlan(company, 'basic');
+      renderPlan(company, 'advanced');
     });
   }
 
-  function renderPlan(company, ci, planName) {
-    const planDiv = document.getElementById(`${planName}-${ci}`);
+  function renderPlan(company, planName) {
+    const planDiv = document.getElementById(`${planName}-${company._id}`);
     planDiv.innerHTML = '';
 
-    company.plans[planName].forEach((yr, yi) => {
+    (company.plans[planName] || []).forEach((yr, yi) => {
       const yrDiv = document.createElement('div');
       yrDiv.className = 'year-range';
 
       let pricesHTML = '';
-      yr.prices.forEach((p, pi) => {
+      (yr.prices || []).forEach((p, pi) => {
         pricesHTML += `
           <div class="price-range">
-            Min: <input type="number" value="${p.min}" onchange="updatePrice(${ci}, '${planName}', ${yi}, ${pi}, 'min', this.value)">
-            Max: <input type="number" value="${p.max}" onchange="updatePrice(${ci}, '${planName}', ${yi}, ${pi}, 'max', this.value)">
-            Percent: <input type="number" value="${p.percent}" step="0.1" onchange="updatePrice(${ci}, '${planName}', ${yi}, ${pi}, 'percent', this.value)">
-            <button onclick="deletePrice(${ci}, '${planName}', ${yi}, ${pi})">Delete Price</button>
+            Min: <input type="number" value="${p.min}" onchange="updatePrice('${company._id}', '${planName}', ${yi}, ${pi}, 'min', this.value)">
+            Max: <input type="number" value="${p.max}" onchange="updatePrice('${company._id}', '${planName}', ${yi}, ${pi}, 'max', this.value)">
+            Percent: <input type="number" value="${p.percent}" step="0.1" onchange="updatePrice('${company._id}', '${planName}', ${yi}, ${pi}, 'percent', this.value)">
+            <button onclick="deletePrice('${company._id}', '${planName}', ${yi}, ${pi})">Delete Price</button>
           </div>
         `;
       });
 
       yrDiv.innerHTML = `
-        Year From: <input type="number" value="${yr.yearFrom}" onchange="updateYear(${ci}, '${planName}', ${yi}, 'from', this.value)">
-        To: <input type="number" value="${yr.yearTo}" onchange="updateYear(${ci}, '${planName}', ${yi}, 'to', this.value)">
-        <button onclick="addPrice(${ci}, '${planName}', ${yi})">+ Price Range</button>
-        <button onclick="deleteYear(${ci}, '${planName}', ${yi})">Delete Year Range</button>
+        Year From: <input type="number" value="${yr.yearFrom}" onchange="updateYear('${company._id}', '${planName}', ${yi}, 'from', this.value)">
+        To: <input type="number" value="${yr.yearTo}" onchange="updateYear('${company._id}', '${planName}', ${yi}, 'to', this.value)">
+        <button onclick="addPrice('${company._id}', '${planName}', ${yi})">+ Price Range</button>
+        <button onclick="deleteYear('${company._id}', '${planName}', ${yi})">Delete Year Range</button>
         ${pricesHTML}
       `;
       planDiv.appendChild(yrDiv);
     });
   }
 
-  function addCompany() {
+  // --- Event handlers ---
+  async function addCompany() {
     const name = prompt("Company name?");
     if (!name) return;
-    fetch('/api/companies', {
+    await fetch('/api/companies', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })
-    }).then(loadCompanies);
+    });
+    loadCompanies();
   }
 
-  function deleteCompany(id) {
-    fetch(`/api/companies/${id}`, { method: 'DELETE' }).then(loadCompanies);
+  async function deleteCompany(id) {
+    await fetch(`/api/companies/${id}`, { method: 'DELETE' });
+    loadCompanies();
   }
 
-  function addYearRange(ci, planName) {
-    companiesData[ci].plans[planName].push({ yearFrom: 2020, yearTo: 2021, prices: [] });
-    renderPlan(companiesData[ci], ci, planName);
-  }
-
-  function deleteYear(ci, planName, yi) {
-    companiesData[ci].plans[planName].splice(yi, 1);
-    renderPlan(companiesData[ci], ci, planName);
-  }
-
-  function addPrice(ci, planName, yi) {
-    companiesData[ci].plans[planName][yi].prices.push({ min: 0, max: 10000, percent: 1 });
-    renderPlan(companiesData[ci], ci, planName);
-  }
-
-  function deletePrice(ci, planName, yi, pi) {
-    companiesData[ci].plans[planName][yi].prices.splice(pi, 1);
-    renderPlan(companiesData[ci], ci, planName);
-  }
-
-  function updateYear(ci, planName, yi, field, value) {
-    if (field === 'from') companiesData[ci].plans[planName][yi].yearFrom = parseInt(value);
-    else companiesData[ci].plans[planName][yi].yearTo = parseInt(value);
-  }
-
-  function updatePrice(ci, planName, yi, pi, field, value) {
-    if (field === 'min') companiesData[ci].plans[planName][yi].prices[pi].min = parseInt(value);
-    else if (field === 'max') companiesData[ci].plans[planName][yi].prices[pi].max = parseInt(value);
-    else companiesData[ci].plans[planName][yi].prices[pi].percent = parseFloat(value);
-  }
-
-  function saveCompany(ci) {
-    const company = companiesData[ci];
-    fetch(`/api/companies/${company.id}`, {
+  async function addYearRange(id, planName) {
+    const res = await fetch(`/api/companies/${id}`);
+    const company = await res.json();
+    company.plans[planName].push({ yearFrom: 2020, yearTo: 2021, prices: [] });
+    await fetch(`/api/companies/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(company)
-    }).then(loadCompanies);
+    });
+    loadCompanies();
   }
 
+  async function deleteYear(id, planName, yi) {
+    const res = await fetch(`/api/companies/${id}`);
+    const company = await res.json();
+    company.plans[planName].splice(yi, 1);
+    await fetch(`/api/companies/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(company)
+    });
+    loadCompanies();
+  }
+
+  async function addPrice(id, planName, yi) {
+    const res = await fetch(`/api/companies/${id}`);
+    const company = await res.json();
+    company.plans[planName][yi].prices.push({ min: 0, max: 10000, percent: 1 });
+    await fetch(`/api/companies/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(company)
+    });
+    loadCompanies();
+  }
+
+  async function deletePrice(id, planName, yi, pi) {
+    const res = await fetch(`/api/companies/${id}`);
+    const company = await res.json();
+    company.plans[planName][yi].prices.splice(pi, 1);
+    await fetch(`/api/companies/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(company)
+    });
+    loadCompanies();
+  }
+
+  async function updateYear(id, planName, yi, field, value) {
+    const res = await fetch(`/api/companies/${id}`);
+    const company = await res.json();
+    if (field === 'from') company.plans[planName][yi].yearFrom = parseInt(value);
+    else company.plans[planName][yi].yearTo = parseInt(value);
+    await fetch(`/api/companies/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(company)
+    });
+  }
+
+  async function updatePrice(id, planName, yi, pi, field, value) {
+    const res = await fetch(`/api/companies/${id}`);
+    const company = await res.json();
+    if (field === 'min') company.plans[planName][yi].prices[pi].min = parseInt(value);
+    else if (field === 'max') company.plans[planName][yi].prices[pi].max = parseInt(value);
+    else company.plans[planName][yi].prices[pi].percent = parseFloat(value);
+    await fetch(`/api/companies/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(company)
+    });
+  }
+
+  async function saveCompany(id) {
+    // مجرد إعادة تحميل، لأن كل التعديلات صارت مباشرة في DB
+    loadCompanies();
+  }
+
+  // --- Init ---
   addCompanyBtn.addEventListener('click', addCompany);
   loadCompanies();
-
-  window.addYearRange = addYearRange;
-window.deleteYear = deleteYear;
-window.addPrice = addPrice;
-window.deletePrice = deletePrice;
-window.updateYear = updateYear;
-window.updatePrice = updatePrice;
-window.saveCompany = saveCompany;
-window.deleteCompany = deleteCompany;
 
 });
