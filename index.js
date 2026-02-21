@@ -1,52 +1,56 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const app = express();
 
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// بيانات الشركات (مؤقتة – بعدين منربطها بداتا)
-let companies = [
-  {
-    id: 1,
-    name: "Rock Mutual",
-    plans: {
-      basic: [
-        {
-          yearFrom: 2013,
-          yearTo: 2015,
-          prices: [
-            { min: 0, max: 25000, percent: 3.75 },
-            { min: 25001, max: 50000, percent: 3.5 },
-            { min: 50001, max: 100000, percent: 3 }
-          ]
-        }
-      ],
-      advanced: []
-    }
+// الاتصال بالـ MongoDB
+const mongoURI = process.env.MONGO_URI;
+mongoose.connect(mongoURI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => {
+  console.log("Connected to MongoDB");
+}).catch(err => {
+  console.error("MongoDB connection error:", err);
+});
+
+// تعريف Schema للشركات
+const companySchema = new mongoose.Schema({
+  name: String,
+  plans: {
+    basic: [
+      {
+        yearFrom: Number,
+        yearTo: Number,
+        prices: [{ min: Number, max: Number, percent: Number }]
+      }
+    ],
+    advanced: [
+      {
+        yearFrom: Number,
+        yearTo: Number,
+        prices: [{ min: Number, max: Number, percent: Number }]
+      }
+    ]
   }
-];
+});
+
+const Company = mongoose.model('Company', companySchema);
 
 // حساب السعر
-function calculatePrice(carYear, carPrice) {
+function calculatePrice(carYear, carPrice, companies) {
   return companies.map(company => {
 
     function getPriceForPlan(planName) {
       const plan = company.plans[planName];
-
       if (!plan) return null;
 
-      // نلاقي فترة السنة المناسبة
-      const yearGroup = plan.find(p =>
-        carYear >= p.yearFrom && carYear <= p.yearTo
-      );
-
+      const yearGroup = plan.find(p => carYear >= p.yearFrom && carYear <= p.yearTo);
       if (!yearGroup) return null;
 
-      // نلاقي شريحة السعر المناسبة
-      const priceRange = yearGroup.prices.find(r =>
-        carPrice >= r.min && carPrice <= r.max
-      );
-
+      const priceRange = yearGroup.prices.find(r => carPrice >= r.min && carPrice <= r.max);
       if (!priceRange) return null;
 
       return Math.round(carPrice * (priceRange.percent / 100));
@@ -60,73 +64,48 @@ function calculatePrice(carYear, carPrice) {
   });
 }
 
-
-// API
-app.post('/calculate', (req, res) => {
+// API لحساب السعر
+app.post('/calculate', async (req, res) => {
   const { year, price } = req.body;
+  if (!year || !price) return res.status(400).json({ error: "Year and price are required" });
 
-  if (!year || !price) {
-    return res.status(400).json({ error: "Year and price are required" });
-  }
-
-  const result = calculatePrice(year, price);
+  const companies = await Company.find();
+  const result = calculatePrice(year, price, companies);
   res.json(result);
 });
 
-// Companies data (initial)
-
-
-// Get all companies
-app.get('/api/companies', (req, res) => {
+// API للشركات
+app.get('/api/companies', async (req, res) => {
+  const companies = await Company.find();
   res.json(companies);
 });
 
-// Add new company
-app.post('/api/companies', (req, res) => {
+app.post('/api/companies', async (req, res) => {
   const { name } = req.body;
+  if (!name) return res.status(400).json({ error: "Name is required" });
 
-  if (!name) {
-    return res.status(400).json({ error: "Name is required" });
-  }
-
-  if (companies.length >= 5) {
-    return res.status(400).json({ error: "Max 5 companies allowed" });
-  }
-
-  const newCompany = {
-    id: Date.now(),
-    name,
-    plans: {
-      basic: [],
-      advanced: []
-    }
-  };
-
-  companies.push(newCompany);
+  const newCompany = new Company({ name, plans: { basic: [], advanced: [] } });
+  await newCompany.save();
   res.json(newCompany);
 });
 
-// Update company
-app.put('/api/companies/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  const company = companies.find(c => c.id === id);
-
-  if (!company) {
-    return res.status(404).json({ error: "Company not found" });
-  }
-
+app.put('/api/companies/:id', async (req, res) => {
+  const { id } = req.params;
   const { name, plans } = req.body;
+
+  const company = await Company.findById(id);
+  if (!company) return res.status(404).json({ error: "Company not found" });
 
   company.name = name;
   company.plans = plans;
+  await company.save();
 
   res.json(company);
 });
 
-// Delete company
-app.delete('/api/companies/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  companies = companies.filter(c => c.id !== id);
+app.delete('/api/companies/:id', async (req, res) => {
+  const { id } = req.params;
+  await Company.findByIdAndDelete(id);
   res.json({ success: true });
 });
 
